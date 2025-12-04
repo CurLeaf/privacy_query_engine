@@ -1,0 +1,17 @@
+# requirements-dev.txt
+
+# 基础工具
+pip>=21.0
+
+# 项目模板生成
+cookiecutter
+
+# 打包与发布工具
+build
+twine
+
+# 开发与测试工具（可选但推荐）
+pytest
+pytest-cov
+black
+flake8
