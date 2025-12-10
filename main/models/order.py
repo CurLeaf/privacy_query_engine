@@ -43,3 +43,4 @@ class OrderUpdate(SQLModel):
     amount: Optional[Decimal] = None
     status: Optional[str] = None
 
+
