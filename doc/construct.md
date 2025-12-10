@@ -61,6 +61,11 @@ privacy_query_engine/
 │   │   ├── database.py                 # DatabaseConnection - 数据库连接
 │   │   └── mock.py                     # MockDatabaseExecutor - Mock执行器
 │   │
+│   ├── 📂 models/                      # SQLModel 数据模型
+│   │   ├── __init__.py
+│   │   ├── user.py                     # User - 用户模型
+│   │   └── order.py                    # Order - 订单模型
+│   │
 │   ├── 📂 api/                         # 能力域5: API服务
 │   │   ├── __init__.py
 │   │   ├── server.py                   # FastAPI服务入口
@@ -91,7 +96,9 @@ privacy_query_engine/
 │   │   └── test_engine.py
 │   │
 │   ├── 📂 test_executor/               # 执行器测试
-│   │   └── __init__.py
+│   │   ├── __init__.py
+│   │   ├── test_database.py            # 数据库连接测试
+│   │   └── test_query_executor.py      # 查询执行器测试
 │   │
 │   ├── 📂 test_api/                    # API测试
 │   │   ├── __init__.py
@@ -131,6 +138,7 @@ privacy_query_engine/
 | **域2: 隐私处理** | `main/privacy/` | `DPRewriter`, `DeIDRewriter` | 应用差分隐私或去标识化 |
 | **域3: 策略管理** | `main/policy/` | `PolicyEngine`, `ConfigManager` | 根据规则决定处理方式 |
 | **域4: 查询执行** | `main/executor/` | `QueryExecutor`, `DatabaseConnection` | 执行SQL并封装结果 |
+| **数据模型** | `main/models/` | `User`, `Order` | SQLModel ORM 实体定义 |
 | **域5: API服务** | `main/api/` | `FastAPI Server`, `Routes` | 提供HTTP接口 |
 
 ---
@@ -180,6 +188,10 @@ privacy_query_engine/
 |------|------|
 | `main/__init__.py` | 包入口，导出 `QueryDriver`, `SQLAnalyzer`, `PolicyEngine` 等 |
 | `main/core/driver.py` | 系统核心控制器，协调各模块完成查询处理 |
+| `main/executor/query_executor.py` | 查询执行器，支持 ORM/SQL/Mock 三种模式 |
+| `main/executor/database.py` | 数据库连接管理，支持 PostgreSQL + SQLModel ORM |
+| `main/models/user.py` | User 用户实体模型 |
+| `main/models/order.py` | Order 订单实体模型 |
 | `main/privacy/dp/mechanisms.py` | 实现 Laplace/Gaussian 噪声机制 |
 | `main/privacy/deid/methods.py` | 实现 hash/mask/generalize 等脱敏方法 |
 | `main/api/server.py` | FastAPI 服务入口，启动 HTTP 服务 |
