@@ -3,9 +3,11 @@
 """
 import os
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from decimal import Decimal
+from unittest.mock import patch
 
 from main.executor.database import DatabaseConnection, DatabaseConfig
+from main.models import User, Order
 
 ENV_DB_CFG = {
     "host": "localhost",
@@ -14,6 +16,7 @@ ENV_DB_CFG = {
     "user": "postgres",
     "password": "123456",
 }
+
 
 class TestDatabaseConfig:
     """DatabaseConfig 测试类"""
@@ -240,6 +243,144 @@ class TestDatabaseConnectionIntegration:
         db.close()
 
 
+class TestORMOperations:
+    """
+    ORM 操作集成测试
+    需要实际的PostgreSQL数据库
+
+    运行方式:
+        pytest tests/test_executor/test_database.py::TestORMOperations -v -m integration
+    """
+    
+    @pytest.fixture
+    def db(self):
+        """创建数据库连接 fixture"""
+        db = DatabaseConnection(
+            host=ENV_DB_CFG["host"],
+            port=ENV_DB_CFG["port"],
+            database=ENV_DB_CFG["database"],
+            user=ENV_DB_CFG["user"],
+            password=ENV_DB_CFG["password"],
+        )
+        yield db
+        db.close()
+
+    @pytest.mark.integration
+    def test_get_all_users(self, db):
+        """测试获取所有用户"""
+        users = db.get_all(User)
+        assert len(users) >= 0  # 可能没有数据
+        if users:
+            assert isinstance(users[0], User)
+
+    @pytest.mark.integration
+    def test_get_user_by_id(self, db):
+        """测试根据ID获取用户"""
+        # 先获取所有用户
+        users = db.get_all(User)
+        if users:
+            user = db.get(User, users[0].id)
+            assert user is not None
+            assert user.id == users[0].id
+
+    @pytest.mark.integration
+    def test_get_user_by_field(self, db):
+        """测试根据字段查询用户"""
+        users = db.get_all(User)
+        if users:
+            # 根据邮箱查询
+            result = db.get_by_field(User, "email", users[0].email)
+            assert len(result) > 0
+            assert result[0].email == users[0].email
+
+    @pytest.mark.integration
+    def test_get_one_by_field(self, db):
+        """测试根据字段查询单个用户"""
+        users = db.get_all(User)
+        if users:
+            user = db.get_one_by_field(User, "email", users[0].email)
+            assert user is not None
+            assert user.email == users[0].email
+
+    @pytest.mark.integration
+    def test_count_users(self, db):
+        """测试统计用户数量"""
+        count = db.count(User)
+        assert isinstance(count, int)
+        assert count >= 0
+
+    @pytest.mark.integration
+    def test_count_orders(self, db):
+        """测试统计订单数量"""
+        count = db.count(Order)
+        assert isinstance(count, int)
+        assert count >= 0
+
+    @pytest.mark.integration
+    def test_get_all_orders(self, db):
+        """测试获取所有订单"""
+        orders = db.get_all(Order)
+        assert len(orders) >= 0
+        if orders:
+            assert isinstance(orders[0], Order)
+            assert isinstance(orders[0].amount, Decimal)
+
+    @pytest.mark.integration
+    def test_custom_query(self, db):
+        """测试自定义查询"""
+        from sqlmodel import select
+        
+        statement = select(User).where(User.age >= 25)
+        users = db.query(statement)
+        
+        for user in users:
+            assert user.age >= 25
+
+
+class TestUserModel:
+    """User 模型单元测试"""
+    
+    def test_user_create(self):
+        """测试创建 User 实例"""
+        user = User(
+            name="测试用户",
+            email="test@example.com",
+            age=30,
+            phone="13800138000"
+        )
+        assert user.name == "测试用户"
+        assert user.email == "test@example.com"
+        assert user.age == 30
+        assert user.phone == "13800138000"
+        assert user.id is None  # 未保存时 ID 为 None
+
+    def test_user_optional_fields(self):
+        """测试 User 可选字段"""
+        user = User(name="测试", email="test@test.com")
+        assert user.age is None
+        assert user.phone is None
+
+
+class TestOrderModel:
+    """Order 模型单元测试"""
+    
+    def test_order_create(self):
+        """测试创建 Order 实例"""
+        order = Order(
+            user_id=1,
+            amount=Decimal("99.99"),
+            status="pending"
+        )
+        assert order.user_id == 1
+        assert order.amount == Decimal("99.99")
+        assert order.status == "pending"
+        assert order.id is None
+
+    def test_order_default_status(self):
+        """测试 Order 默认状态"""
+        order = Order(user_id=1, amount=Decimal("50.00"))
+        assert order.status == "pending"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

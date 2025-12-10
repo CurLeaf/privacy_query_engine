@@ -3,13 +3,16 @@ DatabaseConnection - 数据库连接管理
 使用 SQLModel/SQLAlchemy 连接 PostgreSQL
 """
 import os
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Type, TypeVar, Union, Sequence
 from contextlib import contextmanager
 from urllib.parse import quote_plus
 
-from sqlmodel import create_engine, Session, text
+from sqlmodel import SQLModel, create_engine, Session, select, text
 from sqlalchemy.pool import QueuePool
 from sqlalchemy import event
+
+# 泛型类型变量，用于 ORM 操作
+T = TypeVar("T", bound=SQLModel)
 
 
 class DatabaseConfig:
@@ -116,18 +119,238 @@ class DatabaseConnection:
         
         return self._engine
     
+    def create_tables(self):
+        """创建所有 SQLModel 定义的表"""
+        SQLModel.metadata.create_all(self.engine)
+    
+    def drop_tables(self):
+        """删除所有 SQLModel 定义的表"""
+        SQLModel.metadata.drop_all(self.engine)
+    
     @contextmanager
-    def get_session(self):
-        """获取数据库会话（上下文管理器）"""
-        session = Session(self.engine)
+    def get_session(self, expire_on_commit: bool = False):
+        """
+        获取数据库会话（上下文管理器）
+        
+        Args:
+            expire_on_commit: 提交后是否使对象过期，默认 False 以便在 session 关闭后仍可访问属性
+        """
+        session = Session(self.engine, expire_on_commit=expire_on_commit)
         try:
             yield session
             session.commit()
-        except Exception as e:
+        except Exception:
             session.rollback()
             raise
         finally:
             session.close()
+    
+    # ==================== ORM 操作方法 ====================
+    
+    def add(self, obj: T) -> T:
+        """
+        添加单个对象到数据库
+        
+        Args:
+            obj: SQLModel 模型实例
+            
+        Returns:
+            添加后的对象（包含生成的 ID）
+        """
+        with self.get_session() as session:
+            session.add(obj)
+            session.commit()
+            session.refresh(obj)
+            return obj
+    
+    def add_all(self, objects: List[T]) -> List[T]:
+        """
+        批量添加对象到数据库
+        
+        Args:
+            objects: SQLModel 模型实例列表
+            
+        Returns:
+            添加后的对象列表
+        """
+        with self.get_session() as session:
+            session.add_all(objects)
+            session.commit()
+            for obj in objects:
+                session.refresh(obj)
+            return objects
+    
+    def get(self, model: Type[T], id: int) -> Optional[T]:
+        """
+        根据 ID 获取单个对象
+        
+        Args:
+            model: SQLModel 模型类
+            id: 主键 ID
+            
+        Returns:
+            模型实例或 None
+        """
+        with self.get_session() as session:
+            return session.get(model, id)
+    
+    def get_all(self, model: Type[T]) -> Sequence[T]:
+        """
+        获取模型的所有记录
+        
+        Args:
+            model: SQLModel 模型类
+            
+        Returns:
+            模型实例列表
+        """
+        with self.get_session() as session:
+            statement = select(model)
+            return session.exec(statement).all()
+    
+    def get_by_field(self, model: Type[T], field_name: str, value: Any) -> Sequence[T]:
+        """
+        根据字段值查询
+        
+        Args:
+            model: SQLModel 模型类
+            field_name: 字段名
+            value: 字段值
+            
+        Returns:
+            匹配的模型实例列表
+        """
+        with self.get_session() as session:
+            field = getattr(model, field_name)
+            statement = select(model).where(field == value)
+            return session.exec(statement).all()
+    
+    def get_one_by_field(self, model: Type[T], field_name: str, value: Any) -> Optional[T]:
+        """
+        根据字段值查询单个记录
+        
+        Args:
+            model: SQLModel 模型类
+            field_name: 字段名
+            value: 字段值
+            
+        Returns:
+            匹配的模型实例或 None
+        """
+        with self.get_session() as session:
+            field = getattr(model, field_name)
+            statement = select(model).where(field == value)
+            return session.exec(statement).first()
+    
+    def update(self, obj: T, **kwargs) -> T:
+        """
+        更新对象
+        
+        Args:
+            obj: SQLModel 模型实例
+            **kwargs: 要更新的字段和值
+            
+        Returns:
+            更新后的对象
+        """
+        with self.get_session() as session:
+            # 从数据库获取最新状态
+            db_obj = session.get(type(obj), obj.id)
+            if db_obj is None:
+                raise ValueError(f"Object with id {obj.id} not found")
+            
+            # 更新字段
+            for key, value in kwargs.items():
+                if hasattr(db_obj, key):
+                    setattr(db_obj, key, value)
+            
+            session.add(db_obj)
+            session.commit()
+            session.refresh(db_obj)
+            return db_obj
+    
+    def delete(self, obj: T) -> bool:
+        """
+        删除对象
+        
+        Args:
+            obj: SQLModel 模型实例
+            
+        Returns:
+            是否删除成功
+        """
+        with self.get_session() as session:
+            db_obj = session.get(type(obj), obj.id)
+            if db_obj is None:
+                return False
+            session.delete(db_obj)
+            session.commit()
+            return True
+    
+    def delete_by_id(self, model: Type[T], id: int) -> bool:
+        """
+        根据 ID 删除对象
+        
+        Args:
+            model: SQLModel 模型类
+            id: 主键 ID
+            
+        Returns:
+            是否删除成功
+        """
+        with self.get_session() as session:
+            obj = session.get(model, id)
+            if obj is None:
+                return False
+            session.delete(obj)
+            session.commit()
+            return True
+    
+    def count(self, model: Type[T]) -> int:
+        """
+        统计模型记录数
+        
+        Args:
+            model: SQLModel 模型类
+            
+        Returns:
+            记录数量
+        """
+        with self.get_session() as session:
+            statement = select(model)
+            return len(session.exec(statement).all())
+    
+    def query(self, statement) -> Sequence[Any]:
+        """
+        执行自定义 select 语句
+        
+        Args:
+            statement: SQLModel select 语句
+            
+        Returns:
+            查询结果
+        
+        Example:
+            statement = select(User).where(User.age > 18)
+            users = db.query(statement)
+        """
+        with self.get_session() as session:
+            return session.exec(statement).all()
+    
+    def query_one(self, statement) -> Optional[Any]:
+        """
+        执行自定义 select 语句，返回单个结果
+        
+        Args:
+            statement: SQLModel select 语句
+            
+        Returns:
+            单个查询结果或 None
+        """
+        with self.get_session() as session:
+            return session.exec(statement).first()
+    
+    # ==================== 原始 SQL 操作方法 ====================
     
     def test_connection(self) -> Dict[str, Any]:
         """
@@ -166,9 +389,27 @@ class DatabaseConnection:
                 "port": self.config.port,
             }
     
+    def execute(self, sql: str, params: Dict[str, Any] = None) -> int:
+        """
+        执行不返回结果的 SQL 语句 (INSERT/UPDATE/DELETE/TRUNCATE 等)
+        
+        Args:
+            sql: SQL语句
+            params: 查询参数
+            
+        Returns:
+            影响的行数 (如果适用)
+        """
+        with self.get_session() as session:
+            if params:
+                result = session.execute(text(sql), params)
+            else:
+                result = session.execute(text(sql))
+            return result.rowcount if result.rowcount else 0
+    
     def execute_query(self, sql: str, params: Dict[str, Any] = None) -> List[Dict[str, Any]]:
         """
-        执行查询并返回结果列表
+        执行原始 SQL 查询并返回结果列表
         
         Args:
             sql: SQL查询语句
