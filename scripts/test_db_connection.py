@@ -27,11 +27,11 @@ from main.executor.database import DatabaseConnection
 
 
 def test_connection(
-    host: str = None,
-    port: int = None,
-    database: str = None,
-    user: str = None,
-    password: str = None,
+    host: str = "127.0.0.1",
+    port: int = 5432,
+    database: str = "privacy",
+    user: str = "postgres",
+    password: str = "123456",
 ):
     """测试数据库连接"""
     print("=" * 60)
@@ -110,13 +110,20 @@ def main():
     
     args = parser.parse_args()
     
-    success = test_connection(
-        host=args.host,
-        port=args.port,
-        database=args.database,
-        user=args.user,
-        password=args.password,
-    )
+    # 构建参数，只传入非空值
+    kwargs = {}
+    if args.host:
+        kwargs["host"] = args.host
+    if args.port:
+        kwargs["port"] = args.port
+    if args.database:
+        kwargs["database"] = args.database
+    if args.user:
+        kwargs["user"] = args.user
+    if args.password:
+        kwargs["password"] = args.password
+    
+    success = test_connection(**kwargs)
     
     print("\n" + "=" * 60)
     sys.exit(0 if success else 1)
