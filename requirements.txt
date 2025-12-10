@@ -1,0 +1,27 @@
+# Privacy Query Engine - 项目依赖
+
+# Web框架
+fastapi>=0.115.12
+uvicorn>=0.34.3
+
+# 数据库ORM
+sqlmodel>=0.0.27
+asyncpg>=0.31.0
+psycopg2-binary>=2.9.11
+
+# 数据处理
+numpy>=2.3.0
+pydantic>=2.11.5
+
+# 配置管理
+pyyaml>=6.0.2
+
+# 测试
+pytest>=9.0.1
+pytest-cov>=7.0.0
+httpx>=0.28.1  # FastAPI测试客户端依赖
+
+# 代码质量
+black>=25.11.0
+flake8>=7.3.0
+

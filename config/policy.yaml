@@ -1,0 +1,42 @@
+# Privacy Query Engine - 策略配置文件
+# 配置文件位置: config/policy.yaml
+
+# 策略规则
+rules:
+  # 规则1: 聚合查询使用差分隐私
+  - condition: "aggregations"  # 当存在聚合函数时
+    action: "DP"
+    params:
+      epsilon: 1.0
+      mechanism: "laplace"
+      
+  # 规则2: 敏感列使用去标识化
+  - condition: "sensitive_columns"  # 当存在敏感列时
+    action: "DeID"
+    params:
+      method: "hash"
+
+# 敏感列定义
+sensitive_columns:
+  - name
+  - email
+  - phone
+  - mobile
+  - id_card
+  - ssn
+  - password
+  - address
+
+# 默认隐私参数
+default_epsilon: 1.0
+default_delta: 1e-5
+
+# 字段值域范围 (用于敏感度计算)
+column_bounds:
+  age:
+    min: 0
+    max: 150
+  salary:
+    min: 0
+    max: 10000000
+
