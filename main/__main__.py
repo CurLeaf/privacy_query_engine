@@ -1,66 +1,84 @@
-# type: ignore[attr-defined]
+"""
+Privacy Query Engine - CLI 入口
+
+使用方式:
+    python -m main --help
+    python -m main query "SELECT COUNT(*) FROM users"
+    python -m main process data.csv --output protected.csv
+"""
 from typing import Optional
-
-from enum import Enum
-from random import choice
-
 import typer
 from rich.console import Console
 
-from privacy_query_engine import version
-from privacy_query_engine.example import hello
-
-
-class Color(str, Enum):
-    white = "white"
-    red = "red"
-    cyan = "cyan"
-    magenta = "magenta"
-    yellow = "yellow"
-    green = "green"
-
+from . import __version__
 
 app = typer.Typer(
     name="privacy-query-engine",
-    help="A Python SDK for differential privacy and de-identification in SQL queries",
+    help="差分隐私与去标识化查询引擎",
     add_completion=False,
 )
 console = Console()
 
 
 def version_callback(print_version: bool) -> None:
-    """Print the version of the package."""
+    """打印版本号"""
     if print_version:
-        console.print(f"[yellow]privacy-query-engine[/] version: [bold blue]{version}[/]")
+        console.print(f"[yellow]privacy-query-engine[/] version: [bold blue]{__version__}[/]")
         raise typer.Exit()
 
 
-@app.command(name="")
+@app.command()
+def query(
+    sql: str = typer.Argument(..., help="SQL 查询语句"),
+    mock: bool = typer.Option(True, "--mock/--no-mock", help="使用 Mock 模式"),
+):
+    """执行隐私保护查询"""
+    from . import QueryDriver
+    
+    driver = QueryDriver(use_mock=mock)
+    result = driver.process_query(sql)
+    
+    console.print("[green]查询结果:[/]")
+    console.print(result)
+
+
+@app.command()
+def process(
+    input_file: str = typer.Argument(..., help="输入 CSV 文件路径"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="输出文件路径"),
+    k: int = typer.Option(5, "--k", help="K-匿名化参数"),
+):
+    """处理 CSV 文件并应用隐私保护"""
+    from .data import CSVPrivacyProcessor
+    from .data.csv_processor import ProcessingConfig
+    
+    processor = CSVPrivacyProcessor()
+    config = ProcessingConfig(auto_detect=True, k_anonymity=k)
+    
+    result = processor.process_file(input_file, config)
+    
+    if result.success:
+        console.print(f"[green]处理成功![/] 处理了 {result.processed_row_count} 行")
+        console.print(f"脱敏列: {result.columns_processed}")
+        
+        if output:
+            processor.save_csv(result.data, output)
+            console.print(f"[green]已保存到:[/] {output}")
+    else:
+        console.print(f"[red]处理失败:[/] {result.error}")
+
+
+@app.callback()
 def main(
-    name: str = typer.Option(..., help="Person to greet."),
-    color: Optional[Color] = typer.Option(
-        None,
-        "-c",
-        "--color",
-        "--colour",
-        case_sensitive=False,
-        help="Color for print. If not specified then choice will be random.",
-    ),
-    print_version: bool = typer.Option(
-        None,
-        "-v",
-        "--version",
+    version: bool = typer.Option(
+        None, "-v", "--version",
         callback=version_callback,
         is_eager=True,
-        help="Prints the version of the privacy-query-engine package.",
+        help="显示版本号",
     ),
-) -> None:
-    """Print a greeting with a giving name."""
-    if color is None:
-        color = choice(list(Color))
-
-    greeting: str = hello(name)
-    console.print(f"[bold {color}]{greeting}[/]")
+):
+    """Privacy Query Engine - 差分隐私与去标识化查询引擎"""
+    pass
 
 
 if __name__ == "__main__":
