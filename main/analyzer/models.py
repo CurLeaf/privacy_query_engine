@@ -6,6 +6,47 @@ from typing import List, Optional, Dict, Any
 
 
 @dataclass
+class JoinInfo:
+    """JOIN操作信息"""
+    join_type: str  # INNER, LEFT, RIGHT, FULL
+    tables: List[str]
+    join_conditions: List[str]
+    estimated_cardinality: int = 1
+
+
+@dataclass
+class SubqueryInfo:
+    """子查询信息"""
+    subquery_type: str  # SCALAR, EXISTS, IN, FROM, CORRELATED
+    sql: str  # 子查询SQL
+    location: str  # WHERE, SELECT, FROM, HAVING
+    tables: List[str] = field(default_factory=list)
+    is_correlated: bool = False
+    correlation_columns: List[str] = field(default_factory=list)
+
+
+@dataclass
+class CTEInfo:
+    """CTE (Common Table Expression) 信息"""
+    name: str  # CTE名称
+    sql: str  # CTE定义的SQL
+    columns: List[str] = field(default_factory=list)
+    is_recursive: bool = False
+    references: List[str] = field(default_factory=list)  # 引用的其他CTE或表
+
+
+@dataclass
+class WindowFunction:
+    """窗口函数信息"""
+    function_name: str  # 函数名 (ROW_NUMBER, RANK, SUM, etc.)
+    partition_by: List[str] = field(default_factory=list)  # PARTITION BY 列
+    order_by: List[str] = field(default_factory=list)  # ORDER BY 列
+    window_frame: Optional[str] = None  # 窗口框架 (ROWS/RANGE BETWEEN...)
+    alias: Optional[str] = None  # 别名
+    arguments: List[str] = field(default_factory=list)  # 函数参数
+
+
+@dataclass
 class AnalysisResult:
     """SQL分析结果"""
     
@@ -29,6 +70,18 @@ class AnalysisResult:
     
     # GROUP BY字段
     group_by_columns: List[str] = field(default_factory=list)
+    
+    # JOIN操作信息
+    joins: List[JoinInfo] = field(default_factory=list)
+    
+    # 子查询信息
+    subqueries: List[SubqueryInfo] = field(default_factory=list)
+    
+    # CTE信息
+    ctes: List[CTEInfo] = field(default_factory=list)
+    
+    # 窗口函数信息
+    window_functions: List[WindowFunction] = field(default_factory=list)
     
     # 原始SQL
     original_sql: str = ""
