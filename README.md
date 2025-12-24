@@ -402,3 +402,137 @@ This project is licensed under the terms of the `MIT` license. See [LICENSE](htt
 ## Credits [![🚀 Your next Python package needs a bleeding-edge project structure.](https://img.shields.io/badge/python--package--template-%F0%9F%9A%80-brightgreen)](https://github.com/TezRomacH/python-package-template)
 
 This project was generated with [`python-package-template`](https://github.com/TezRomacH/python-package-template)
+
+
+## 📚 OpenAPI 规范
+
+Privacy Query Engine 提供完整的 OpenAPI 3.0+ 规范文档，支持自动生成客户端 SDK 和集成到各种 API 工具。
+
+### 查看交互式文档
+
+启动服务后，访问以下 URL 查看交互式 API 文档：
+
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **OpenAPI JSON**: http://localhost:8000/openapi.json
+
+### 导出 OpenAPI 规范
+
+使用命令行工具导出 OpenAPI 规范文件：
+
+```bash
+# 导出为 JSON 格式
+python scripts/export_openapi.py --format json --output openapi.json
+
+# 导出为 YAML 格式
+python scripts/export_openapi.py --format yaml --output openapi.yaml
+
+# 同时导出 JSON 和 YAML
+python scripts/export_openapi.py --format both --output openapi
+```
+
+### 集成到 API 工具
+
+#### Postman
+
+1. 打开 Postman
+2. 点击 **File > Import**
+3. 选择导出的 `openapi.json` 或 `openapi.yaml` 文件
+4. Postman 会自动创建完整的 API 集合
+
+#### Insomnia
+
+1. 打开 Insomnia
+2. 点击 **Application > Preferences > Data > Import Data**
+3. 选择导出的 OpenAPI 文件
+4. 所有 API 端点将自动导入
+
+### 生成客户端 SDK
+
+使用 OpenAPI Generator 生成各种语言的客户端 SDK：
+
+```bash
+# 安装 OpenAPI Generator
+npm install @openapitools/openapi-generator-cli -g
+
+# 生成 Python 客户端
+openapi-generator-cli generate \
+  -i openapi.json \
+  -g python \
+  -o ./client-python
+
+# 生成 TypeScript 客户端
+openapi-generator-cli generate \
+  -i openapi.json \
+  -g typescript-axios \
+  -o ./client-typescript
+
+# 生成 Java 客户端
+openapi-generator-cli generate \
+  -i openapi.json \
+  -g java \
+  -o ./client-java
+```
+
+支持的语言包括：Python, TypeScript, Java, Go, Rust, C#, PHP, Ruby 等 50+ 种语言。
+
+### OpenAPI 规范特性
+
+我们的 OpenAPI 规范包含：
+
+- ✅ 完整的端点定义和参数说明
+- ✅ 详细的请求/响应模型和示例
+- ✅ 标准化的错误响应格式
+- ✅ 按功能分组的 API 标签
+- ✅ 安全方案定义（API Key, Bearer Token）
+- ✅ 服务器配置（开发、测试、生产环境）
+- ✅ 外部文档链接
+
+### 验证 OpenAPI 规范
+
+使用 OpenAPI 验证工具检查规范的有效性：
+
+```bash
+# 安装验证工具
+pip install openapi-spec-validator
+
+# 验证规范
+openapi-spec-validator openapi.json
+```
+
+### 编程方式使用
+
+在 Python 代码中使用导出功能：
+
+```python
+from main.api.server import app
+from main.api.export import OpenAPIExporter
+
+# 创建导出器
+exporter = OpenAPIExporter(app)
+
+# 导出为 JSON
+exporter.export_json("openapi.json")
+
+# 导出为 YAML
+exporter.export_yaml("openapi.yaml")
+
+# 同时导出两种格式
+exporter.export_both("openapi")
+
+# 获取 schema 字典
+schema = exporter.get_schema()
+```
+
+### API 版本管理
+
+当前 API 版本：**v3.0.0**
+
+所有 API 端点都包含版本前缀 `/api/v1`，确保向后兼容性。
+
+### 更多资源
+
+- [OpenAPI 规范官方文档](https://swagger.io/specification/)
+- [OpenAPI Generator 文档](https://openapi-generator.tech/)
+- [Swagger UI 文档](https://swagger.io/tools/swagger-ui/)
+- [ReDoc 文档](https://redocly.com/redoc/)

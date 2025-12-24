@@ -13,11 +13,14 @@ FastAPI Server - HTTP服务入口
 """
 import os
 from contextlib import asynccontextmanager
+from typing import Dict, Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 
 from .routes import router, get_query_driver, reset_query_driver
+from .openapi_config import OpenAPIConfig
 
 
 def _get_run_mode() -> str:
@@ -62,34 +65,19 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     """创建FastAPI应用实例"""
+    # 获取 OpenAPI 元数据
+    metadata = OpenAPIConfig.get_metadata()
+    
     app = FastAPI(
-        title="Privacy Query Engine",
-        description="""
-## 差分隐私与去标识化查询引擎 API
-
-### 功能
-- 对 SQL 查询自动应用隐私保护
-- 支持差分隐私 (DP) 和去标识化 (DeID) 两种保护方式
-- 根据策略配置自动选择保护方式
-
-### 运行模式
-- **Mock 模式**: 使用模拟数据（默认）
-- **数据库模式**: 连接真实 PostgreSQL 数据库
-
-### 环境变量
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `USE_MOCK_DB` | 是否使用 Mock 模式 | `true` |
-| `PG_HOST` | 数据库主机 | `localhost` |
-| `PG_PORT` | 数据库端口 | `5432` |
-| `PG_DATABASE` | 数据库名 | `postgres` |
-| `PG_USER` | 用户名 | `postgres` |
-| `PG_PASSWORD` | 密码 | - |
-        """,
-        version="1.0.0",
+        title=metadata["title"],
+        version=metadata["version"],
+        description=metadata["description"],
+        contact=metadata["contact"],
+        license_info=metadata["license"],
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,
+        openapi_tags=OpenAPIConfig.get_tags_metadata(),
     )
     
     # 配置CORS
@@ -109,11 +97,55 @@ def create_app() -> FastAPI:
     async def root():
         return {
             "name": "Privacy Query Engine",
-            "version": "1.0.0",
+            "version": metadata["version"],
             "mode": _get_run_mode(),
             "docs": "/docs",
+            "redoc": "/redoc",
+            "openapi": "/openapi.json",
             "status": "/api/v1/status",
         }
+    
+    # 自定义 OpenAPI schema
+    def custom_openapi() -> Dict[str, Any]:
+        """
+        自定义 OpenAPI schema 生成
+        
+        添加额外的元数据、服务器信息、安全方案等
+        """
+        if app.openapi_schema:
+            return app.openapi_schema
+        
+        # 生成基础 OpenAPI schema
+        openapi_schema = get_openapi(
+            title=metadata["title"],
+            version=metadata["version"],
+            description=metadata["description"],
+            routes=app.routes,
+            tags=OpenAPIConfig.get_tags_metadata(),
+        )
+        
+        # 添加联系信息和许可证
+        openapi_schema["info"]["contact"] = metadata["contact"]
+        openapi_schema["info"]["license"] = metadata["license"]
+        
+        # 添加服务器列表
+        openapi_schema["servers"] = OpenAPIConfig.get_servers()
+        
+        # 添加外部文档链接
+        openapi_schema["externalDocs"] = OpenAPIConfig.get_external_docs()
+        
+        # 添加安全方案（可选）
+        if "components" not in openapi_schema:
+            openapi_schema["components"] = {}
+        
+        openapi_schema["components"]["securitySchemes"] = OpenAPIConfig.get_security_schemes()
+        
+        # 缓存 schema
+        app.openapi_schema = openapi_schema
+        return app.openapi_schema
+    
+    # 绑定自定义 OpenAPI 函数
+    app.openapi = custom_openapi
     
     return app
 

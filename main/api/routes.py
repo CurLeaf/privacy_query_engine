@@ -139,23 +139,185 @@ def reset_query_driver():
 @router.post(
     "/protect-query",
     response_model=QueryResponse,
-    summary="保护查询",
-    description="对SQL查询应用差分隐私或去标识化保护",
-    responses={
-        200: {"description": "成功返回隐私保护后的结果"},
-        400: {"model": ErrorResponse, "description": "请求参数错误"},
-        422: {"model": ErrorResponse, "description": "不支持的查询类型"},
-        500: {"model": ErrorResponse, "description": "服务器内部错误"},
+    status_code=200,
+    summary="执行隐私保护查询",
+    description="""
+对 SQL 查询应用差分隐私或去标识化保护。
+
+系统会自动分析查询类型，并根据策略配置选择合适的隐私保护机制：
+
+- **差分隐私 (DP)**: 对聚合查询（COUNT, SUM, AVG 等）添加校准噪声，提供数学上的隐私保证
+- **去标识化 (DeID)**: 对包含敏感列（姓名、邮箱、电话等）的查询进行脱敏处理
+- **直接通过 (PASS)**: 对不涉及隐私的查询直接执行
+
+## 使用示例
+
+### 聚合查询（应用差分隐私）
+```json
+{
+  "sql": "SELECT COUNT(*) FROM users WHERE age > 18;",
+  "context": {"user_id": "user_001"}
+}
+```
+
+响应示例：
+```json
+{
+  "status": "success",
+  "data": {
+    "type": "DP",
+    "original_query": "SELECT COUNT(*) FROM users WHERE age > 18;",
+    "protected_result": 1023,
+    "privacy_info": {
+      "epsilon": 1.0,
+      "method": "Laplace",
+      "sensitivity": 1,
+      "noise_added": 3
     }
+  }
+}
+```
+
+### 包含敏感列的查询（应用去标识化）
+```json
+{
+  "sql": "SELECT name, email FROM users LIMIT 10;",
+  "context": {"user_id": "user_001"}
+}
+```
+
+响应示例：
+```json
+{
+  "status": "success",
+  "data": {
+    "type": "DeID",
+    "original_query": "SELECT name, email FROM users LIMIT 10;",
+    "protected_result": [
+      {"name": "User_***", "email": "***@example.com"},
+      {"name": "User_***", "email": "***@example.com"}
+    ],
+    "privacy_info": {
+      "method": "Masking",
+      "columns_processed": ["name", "email"]
+    }
+  }
+}
+```
+
+## 注意事项
+
+- 仅支持 SELECT 查询
+- 启用预算管理时，会检查用户的隐私预算是否充足
+- 查询上下文中的 user_id 用于预算管理和审计
+    """,
+    responses={
+        200: {
+            "description": "成功返回隐私保护后的结果",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "dp_query": {
+                            "summary": "差分隐私查询示例",
+                            "value": {
+                                "status": "success",
+                                "data": {
+                                    "type": "DP",
+                                    "original_query": "SELECT COUNT(*) FROM users;",
+                                    "protected_result": 1023,
+                                    "privacy_info": {
+                                        "epsilon": 1.0,
+                                        "method": "Laplace",
+                                        "sensitivity": 1,
+                                        "noise_added": 3
+                                    }
+                                }
+                            }
+                        },
+                        "deid_query": {
+                            "summary": "去标识化查询示例",
+                            "value": {
+                                "status": "success",
+                                "data": {
+                                    "type": "DeID",
+                                    "original_query": "SELECT name, email FROM users LIMIT 5;",
+                                    "protected_result": [
+                                        {"name": "User_***", "email": "***@example.com"},
+                                        {"name": "User_***", "email": "***@example.com"}
+                                    ],
+                                    "privacy_info": {
+                                        "method": "Masking",
+                                        "columns_processed": ["name", "email"]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "请求参数错误",
+            "model": ErrorResponse,
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "error",
+                        "error_code": "INVALID_REQUEST",
+                        "message": "SQL 查询不能为空",
+                        "detail": "The 'sql' field is required and cannot be empty",
+                        "timestamp": "2024-12-24T10:30:00Z"
+                    }
+                }
+            }
+        },
+        422: {
+            "description": "不支持的查询类型",
+            "model": ErrorResponse,
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "error",
+                        "error_code": "UNSUPPORTED_QUERY",
+                        "message": "不支持 UPDATE 操作",
+                        "detail": "Only SELECT queries are supported. UPDATE, INSERT, DELETE operations are not allowed.",
+                        "timestamp": "2024-12-24T10:30:00Z"
+                    }
+                }
+            }
+        },
+        500: {
+            "description": "服务器内部错误",
+            "model": ErrorResponse,
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "error",
+                        "error_code": "INTERNAL_ERROR",
+                        "message": "服务器内部错误",
+                        "detail": "An unexpected error occurred while processing the query",
+                        "timestamp": "2024-12-24T10:30:00Z"
+                    }
+                }
+            }
+        }
+    },
+    tags=["Query", "Privacy"]
 )
 async def protect_query(request: QueryRequest) -> QueryResponse:
     """
-    保护查询接口
+    执行隐私保护查询
     
-    - **sql**: SQL查询语句
-    - **context**: 可选的查询上下文信息
+    接收 SQL 查询请求，自动应用适当的隐私保护机制，并返回处理后的结果。
     
-    返回经过隐私保护处理的查询结果。
+    Args:
+        request: 查询请求，包含 SQL 语句和可选的上下文信息
+    
+    Returns:
+        QueryResponse: 包含处理结果和隐私信息的响应
+    
+    Raises:
+        HTTPException: 当请求无效或处理失败时
     """
     try:
         driver = get_query_driver()
@@ -212,13 +374,91 @@ async def protect_query(request: QueryRequest) -> QueryResponse:
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
-@router.get("/health", summary="健康检查")
+@router.get(
+    "/health",
+    summary="健康检查",
+    description="检查服务是否正常运行。用于负载均衡器和监控系统的健康检查。",
+    responses={
+        200: {
+            "description": "服务正常运行",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "healthy",
+                        "service": "privacy-query-engine"
+                    }
+                }
+            }
+        }
+    },
+    tags=["Root"]
+)
 async def health_check():
     """健康检查接口"""
     return {"status": "healthy", "service": "privacy-query-engine"}
 
 
-@router.get("/status", summary="服务状态")
+@router.get(
+    "/status",
+    summary="服务状态",
+    description="""
+获取服务的详细状态信息。
+
+返回信息包括：
+- 运行模式（Mock/Database）
+- 数据库连接状态（如果使用数据库模式）
+- 启用的功能列表
+- 服务版本信息
+    """,
+    responses={
+        200: {
+            "description": "服务状态信息",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "mock_mode": {
+                            "summary": "Mock 模式状态",
+                            "value": {
+                                "status": "running",
+                                "mode": "mock",
+                                "service": "privacy-query-engine",
+                                "version": "2.0.0",
+                                "features": {
+                                    "budget_management": False,
+                                    "enhanced_sql_analysis": True,
+                                    "advanced_privacy_mechanisms": True,
+                                    "multi_database_support": True
+                                }
+                            }
+                        },
+                        "database_mode": {
+                            "summary": "数据库模式状态",
+                            "value": {
+                                "status": "running",
+                                "mode": "database",
+                                "service": "privacy-query-engine",
+                                "version": "2.0.0",
+                                "features": {
+                                    "budget_management": True,
+                                    "enhanced_sql_analysis": True,
+                                    "advanced_privacy_mechanisms": True,
+                                    "multi_database_support": True
+                                },
+                                "database": {
+                                    "status": "connected",
+                                    "host": "localhost",
+                                    "port": "5432",
+                                    "database": "privacy"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    tags=["Root"]
+)
 async def service_status():
     """
     获取服务详细状态
@@ -269,7 +509,49 @@ async def service_status():
 @router.get(
     "/budget/{user_id}",
     summary="获取用户预算状态",
-    description="获取指定用户的隐私预算状态 (v2.0)",
+    description="""
+获取指定用户的隐私预算状态。
+
+隐私预算（Privacy Budget）是差分隐私中的核心概念，用 epsilon (ε) 值表示。
+较小的 epsilon 值提供更强的隐私保护，但可能降低数据可用性。
+
+返回信息包括：
+- 总预算：用户的总隐私预算
+- 已消耗预算：已经使用的预算
+- 剩余预算：还可以使用的预算
+- 最后更新时间
+
+**注意**: 此功能需要启用预算管理（设置环境变量 ENABLE_BUDGET_MANAGEMENT=true）
+    """,
+    responses={
+        200: {
+            "description": "成功返回预算状态",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "success",
+                        "data": {
+                            "user_id": "user_001",
+                            "total_budget": 10.0,
+                            "consumed_budget": 3.5,
+                            "remaining_budget": 6.5,
+                            "last_updated": "2024-12-24T10:30:00Z"
+                        }
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "预算管理未启用",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Budget management is not enabled. Set ENABLE_BUDGET_MANAGEMENT=true"
+                    }
+                }
+            }
+        }
+    },
     tags=["Budget"]
 )
 async def get_budget_status(user_id: str):
@@ -298,7 +580,50 @@ async def get_budget_status(user_id: str):
 @router.post(
     "/budget/{user_id}/reset",
     summary="重置用户预算",
-    description="重置指定用户的隐私预算 (v2.0)",
+    description="""
+重置指定用户的隐私预算，将已消耗预算清零。
+
+**警告**: 此操作会清除用户的预算消耗历史，应谨慎使用。
+通常用于：
+- 新的时间周期开始（如每月重置）
+- 测试和开发环境
+- 用户请求重置
+
+**注意**: 此功能需要启用预算管理（设置环境变量 ENABLE_BUDGET_MANAGEMENT=true）
+    """,
+    responses={
+        200: {
+            "description": "成功重置预算",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "success",
+                        "message": "Budget reset for user user_001"
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "预算管理未启用",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Budget management is not enabled. Set ENABLE_BUDGET_MANAGEMENT=true"
+                    }
+                }
+            }
+        },
+        500: {
+            "description": "重置失败",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Failed to reset budget"
+                    }
+                }
+            }
+        }
+    },
     tags=["Budget"]
 )
 async def reset_budget(user_id: str):
@@ -331,7 +656,66 @@ async def reset_budget(user_id: str):
 @router.get(
     "/budget/{user_id}/history",
     summary="获取用户预算历史",
-    description="获取指定用户的预算消耗历史 (v2.0)",
+    description="""
+获取指定用户的预算消耗历史记录。
+
+返回用户的所有预算交易记录，包括：
+- 交易ID
+- 执行的查询
+- 消耗的 epsilon 值
+- 时间戳
+
+可用于：
+- 审计用户的隐私预算使用情况
+- 分析查询模式
+- 预算消耗趋势分析
+
+**注意**: 此功能需要启用预算管理（设置环境变量 ENABLE_BUDGET_MANAGEMENT=true）
+    """,
+    responses={
+        200: {
+            "description": "成功返回预算历史",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "success",
+                        "data": {
+                            "user_id": "user_001",
+                            "transactions": [
+                                {
+                                    "transaction_id": "txn_abc123",
+                                    "user_id": "user_001",
+                                    "query": "SELECT COUNT(*) FROM users;",
+                                    "epsilon_consumed": 1.0,
+                                    "timestamp": "2024-12-24T10:30:00Z",
+                                    "query_type": "DP"
+                                },
+                                {
+                                    "transaction_id": "txn_def456",
+                                    "user_id": "user_001",
+                                    "query": "SELECT AVG(salary) FROM employees;",
+                                    "epsilon_consumed": 1.5,
+                                    "timestamp": "2024-12-24T10:35:00Z",
+                                    "query_type": "DP"
+                                }
+                            ],
+                            "count": 2
+                        }
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "预算管理未启用",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Budget management is not enabled. Set ENABLE_BUDGET_MANAGEMENT=true"
+                    }
+                }
+            }
+        }
+    },
     tags=["Budget"]
 )
 async def get_budget_history(

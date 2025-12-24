@@ -16,10 +16,14 @@ pydantic>=2.11.5
 # 配置管理
 pyyaml>=6.0.2
 
+# OpenAPI 支持
+openapi-spec-validator>=0.7.1  # OpenAPI 规范验证
+
 # 测试
 pytest>=9.0.1
 pytest-cov>=7.0.0
 httpx>=0.28.1  # FastAPI测试客户端依赖
+hypothesis>=6.98.0  # 基于属性的测试
 
 # 代码质量
 black>=25.11.0
